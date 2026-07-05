@@ -1,0 +1,119 @@
+# ============================================================
+# Clawbox — Hermes Agent + 9Router (Free AI Gateway)
+# ============================================================
+#
+# Baseado no docker-compose oficial do NousResearch:
+#   - gateway:   processo principal do Hermes Agent
+#   - dashboard: UI web do Hermes
+#   - 9router:   proxy OpenAI-compatible com 40+ providers gratuitos
+#
+# Uso:
+#   docker compose up -d
+#   docker compose logs -f
+#
+# Acessos:
+#   9Router API:       http://localhost:20128/v1
+#   9Router Dashboard: http://localhost:20128/dashboard
+#   Hermes Dashboard:  http://localhost:9119
+# ============================================================
+
+services:
+
+  # ──────────────────────────────────────────────
+  # 9Router — Free AI API Gateway
+  # Roda sem nenhuma autenticação
+  # API:       http://localhost:20128/v1
+  # Dashboard: http://localhost:20128/dashboard
+  # ──────────────────────────────────────────────
+  9router:
+    image: decolua/9router:latest
+    container_name: clawbox-9router
+    restart: unless-stopped
+    pull_policy: missing
+    ports:
+      - "${ROUTER_PORT:-20128}:20128"
+    volumes:
+      - 9router-data:/app/data
+    environment:
+      - DATA_DIR=/app/data
+      - PORT=20128
+      - HOSTNAME=0.0.0.0
+      - DEBUG=${ROUTER_DEBUG:-false}
+      - TZ=${TZ:-America/Sao_Paulo}
+    networks:
+      - clawbox-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:20128/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ──────────────────────────────────────────────
+  # Hermes Gateway — processo principal do agent
+  # Imagem: nousresearch/hermes-agent (Docker Hub, sem auth!)
+  # Apontado para 9router como backend LLM
+  # ──────────────────────────────────────────────
+  hermes-gateway:
+    image: nousresearch/hermes-agent:latest
+    container_name: clawbox-hermes-gateway
+    restart: unless-stopped
+    pull_policy: missing
+    depends_on:
+      9router:
+        condition: service_healthy
+    volumes:
+      - hermes-data:/opt/data
+    environment:
+      - HERMES_UID=${HERMES_UID:-10000}
+      - HERMES_GID=${HERMES_GID:-10000}
+      - TZ=${TZ:-America/Sao_Paulo}
+      # Aponta para o 9router como backend OpenAI-compatible
+      - OPENAI_BASE_URL=http://9router:20128/v1
+      - OPENAI_API_KEY=${HERMES_API_KEY:-sk-free-via-9router}
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama}
+      - KILOCODE_API_KEY=${KILO_API_KEY:-VPQ8-AATK}
+      # Integrações opcionais
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+    command: ["gateway", "run"]
+    networks:
+      - clawbox-net
+
+  # ──────────────────────────────────────────────
+  # Hermes Dashboard — UI web do Hermes Agent
+  # Acesso: http://localhost:9119
+  # ⚠️  Bind em 127.0.0.1 — contém API keys!
+  # ──────────────────────────────────────────────
+  hermes-dashboard:
+    image: nousresearch/hermes-agent:latest
+    container_name: clawbox-hermes-dashboard
+    restart: unless-stopped
+    pull_policy: missing
+    depends_on:
+      - hermes-gateway
+    volumes:
+      - hermes-data:/opt/data
+    environment:
+      - HERMES_UID=${HERMES_UID:-10000}
+      - HERMES_GID=${HERMES_GID:-10000}
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_USERNAME:-admin}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_PASSWORD:-admin}
+      - TZ=${TZ:-America/Sao_Paulo}
+    ports:
+      - "127.0.0.1:${HERMES_DASHBOARD_PORT:-4999}:9119"
+    command: ["dashboard", "--host", "0.0.0.0", "--port", "9119", "--no-open"]
+    networks:
+      - clawbox-net
+
+networks:
+  clawbox-net:
+    name: clawbox-net
+    driver: bridge
+
+volumes:
+  9router-data:
+    name: clawbox-9router-data
+  hermes-data:
+    name: clawbox-hermes-data

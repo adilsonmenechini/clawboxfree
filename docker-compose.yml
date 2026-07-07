@@ -36,6 +36,7 @@ services:
       - 9router-data:/app/data
     environment:
       - DATA_DIR=/app/data
+      - HEADROOM_URL=http://headroom:8787
       - PORT=20128
       - HOSTNAME=0.0.0.0
       - DEBUG=${ROUTER_DEBUG:-false}
@@ -49,19 +50,27 @@ services:
       retries: 5
       start_period: 20s
 
+  headroom:
+    image: ghcr.io/chopratejas/headroom:latest
+    ports:
+      - "8787:8787"
   # ──────────────────────────────────────────────
   # Hermes Gateway — processo principal do agent
   # Imagem: nousresearch/hermes-agent (Docker Hub, sem auth!)
   # Apontado para 9router como backend LLM
   # ──────────────────────────────────────────────
   hermes-gateway:
-    image: nousresearch/hermes-agent:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.hermes
     container_name: clawbox-hermes-gateway
     restart: unless-stopped
     pull_policy: missing
     depends_on:
       9router:
         condition: service_healthy
+      dind:
+        condition: service_started
     volumes:
       - hermes-data:/opt/data
     environment:
@@ -70,10 +79,15 @@ services:
       - TZ=${TZ:-America/Sao_Paulo}
       # Aponta para o 9router como backend OpenAI-compatible
       - OPENAI_BASE_URL=http://9router:20128/v1
+      - HERMES_API_KEY=${HERMES_API_KEY:-sk-free-via-9router}
+      - HERMES_BASE_URL=http://9router:20128/v1
+      - OPENAI_BASE_URL=http://9router:20128/v1
       - OPENAI_API_KEY=${HERMES_API_KEY:-sk-free-via-9router}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama}
       - KILOCODE_API_KEY=${KILO_API_KEY:-VPQ8-AATK}
+      # Aponta pro DinD sandbox
+      - DOCKER_HOST=tcp://dind:2375
       # Integrações opcionais
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
@@ -102,8 +116,32 @@ services:
       - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_PASSWORD:-admin}
       - TZ=${TZ:-America/Sao_Paulo}
     ports:
-      - "127.0.0.1:${HERMES_DASHBOARD_PORT:-4999}:9119"
+      - "${HERMES_DASHBOARD_PORT:-4999}:9119"
     command: ["dashboard", "--host", "0.0.0.0", "--port", "9119", "--no-open"]
+    networks:
+      - clawbox-net
+
+  # ──────────────────────────────────────────────
+  # Docker-in-Docker — Cria containers dentro do container
+  # API remota: tcp://<server-ip>:2375
+  # Uso: export DOCKER_HOST=tcp://<server-ip>:2375
+  # ──────────────────────────────────────────────
+  dind:
+    image: docker:dind
+    container_name: clawbox-dind
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "2375:2375"
+      - "8080:8080"
+      - "3000:3000"
+      - "5000:5000"
+      - "6000:6000"
+      - "7000:7000"
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    volumes:
+      - dind-data:/var/lib/docker
     networks:
       - clawbox-net
 
@@ -117,3 +155,4 @@ volumes:
     name: clawbox-9router-data
   hermes-data:
     name: clawbox-hermes-data
+  dind-data:

@@ -1,0 +1,41 @@
+# ──────────────────────────────────────────────────────────
+# Pre-commit hooks for Clawbox
+# Install: pre-commit install
+# Run all: pre-commit run --all-files
+# ──────────────────────────────────────────────────────────
+repos:
+  # ── Ruff: Python linter + formatter ──────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.5
+    hooks:
+      - id: ruff
+        name: ruff lint
+        description: "Run Ruff linter on Python files"
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^ai-free/
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        description: "Run Ruff formatter on Python files"
+        files: ^ai-free/
+        types_or: [python, pyi]
+
+  # ── Pyright: Python static type checker ──────────────────
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.407
+    hooks:
+      - id: pyright
+        name: pyright
+        description: "Run pyright type checker on Python files"
+        args: [--project, ai-free/pyproject.toml]
+        files: ^ai-free/
+        types_or: [python, pyi]
+
+  # ── Gitleaks: Git secrets scanner ────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        name: gitleaks
+        description: "Scan for hardcoded secrets, passwords, and API keys"
+        args: [--no-banner]

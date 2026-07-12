@@ -1,5 +1,5 @@
 FROM nousresearch/hermes-agent:latest
 
 USER root
-RUN apk add --no-cache docker-cli
+RUN apt-get update && apt-get install -y --no-install-recommends docker.io && rm -rf /var/lib/apt/lists/*
 USER hermes

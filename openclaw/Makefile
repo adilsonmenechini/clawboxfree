@@ -1,25 +1,26 @@
 # ============================================================
 # Clawbox — OpenClaw Makefile
-# Gerencia o OpenClaw (gateway + Control UI + CLI)
+# Gerencia o OpenClaw (gateway + Control UI + proxy + CLI)
 # ============================================================
 #
 # Uso:
-#   make up              # sobe o gateway
+#   make up              # sobe gateway + proxy
 #   make down            # remove containers
 #   make onboard         # onboarding inicial
 #   make setup           # configura provider 9router
+#   make token           # mostra o gateway token
 #   make logs
 # ============================================================
 
 COMPOSE := docker compose -p clawbox
 
-.PHONY: help up down onboard setup logs ps build pull config
+.PHONY: help up down onboard setup logs ps build pull config token auth-password
 
 help: ## Mostra esta ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "} {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-up: ## Sobe o OpenClaw gateway
+up: ## Sobe o OpenClaw gateway + proxy
 	$(COMPOSE) up -d --build
 
 down: ## Remove containers (volumes preservados)
@@ -30,6 +31,31 @@ onboard: ## Onboarding inicial (automático, não-interativo)
 
 setup: scripts/openclaw-setup.sh ## Configura provider 9router no OpenClaw
 	@bash scripts/openclaw-setup.sh
+
+token: ## Mostra o gateway token (para a Control UI)
+	@echo "Gateway token:"
+	@$(COMPOSE) exec openclaw \
+		sh -c "cat /home/node/.openclaw/openclaw.json | python3 -c \"import sys,json; print(json.load(sys.stdin)['gateway']['auth']['token'])\"" 2>/dev/null || \
+		$(COMPOSE) exec openclaw \
+		sh -c "cat /home/node/.openclaw/openclaw.json | grep -o '\"token\": *\"[^\"]*\"' | head -1 | cut -d'\"' -f4"
+
+auth-password: ## Mostra a senha do basic auth do proxy
+	@echo "Proxy auth:"; \
+	PORT=8080; \
+	if [ -f .env ] && grep -q '^OPENCLAW_PROXY_PORT=' .env 2>/dev/null; then \
+		PORT=$$(grep '^OPENCLAW_PROXY_PORT=' .env | cut -d= -f2); \
+	fi; \
+	USER=admin; \
+	if [ -f .env ] && grep -q '^OPENCLAW_AUTH_USERNAME=' .env 2>/dev/null; then \
+		USER=$$(grep '^OPENCLAW_AUTH_USERNAME=' .env | cut -d= -f2); \
+	fi; \
+	PASS='<not set>'; \
+	if [ -f .env ] && grep -q '^OPENCLAW_AUTH_PASSWORD=' .env 2>/dev/null; then \
+		PASS=$$(grep '^OPENCLAW_AUTH_PASSWORD=' .env | cut -d= -f2); \
+	fi; \
+	echo "  URL:      http://127.0.0.1:$$PORT"; \
+	echo "  Username: $$USER"; \
+	echo "  Password: $$PASS"
 
 logs: ## Segue logs (svc=<nome>; default: todos)
 	$(COMPOSE) logs -f $(svc)

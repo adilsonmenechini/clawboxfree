@@ -4,11 +4,11 @@
 
 Clawbox combines three powerful open-source tools running as separate service stacks:
 
-| Stack         | Services                           | Folder       | Ports              |
-| ------------- | ---------------------------------- | ------------ | ------------------ |
-| **providers** | 9router + Headroom + DinD          | `providers/` | `20128`            |
-| **hermes**    | Hermes Agent (gateway + dashboard) | `hermes/`    | Dashboard `4999`   |
-| **openclaw**  | OpenClaw (gateway + CLI)           | `openclaw/`  | Control UI `18789` |
+| Stack         | Services                           | Folder       | Ports                             |
+| ------------- | ---------------------------------- | ------------ | --------------------------------- |
+| **providers** | 9router + Headroom + DinD          | `providers/` | `20128`                           |
+| **hermes**    | Hermes Agent (gateway + dashboard) | `hermes/`    | Dashboard `4999`                  |
+| **openclaw**  | OpenClaw (gateway + proxy + CLI)   | `openclaw/`  | (proxy) `8080` / (direto) `18789` |
 
 ---
 
@@ -32,6 +32,13 @@ make openclaw
 
 # 6. Configure 9router provider no OpenClaw (extrai a chave automagicamente)
 make openclaw-setup
+
+# 7. Pegue a senha do proxy e o gateway token
+make openclaw-auth    # mostra credenciais basic auth
+make openclaw-token   # mostra o gateway token
+
+# 8. Abra o Clawbox via proxy (recomendado):
+open http://localhost:8080
 
 # 7. Follow logs
 make logs
@@ -58,8 +65,11 @@ clawbox/
 │
 ├── openclaw/               # OpenClaw
 │   ├── .env / .env.example
-│   ├── docker-compose.yml  # openclaw + openclaw-cli
+│   ├── docker-compose.yml  # openclaw + openclaw-cli + nginx proxy
 │   ├── Makefile
+│   ├── nginx/
+│   │   ├── nginx.conf       # proxy config (basic auth)
+│   │   └── entrypoint.sh    # gera .htpasswd de env vars
 │   └── scripts/openclaw-setup.sh
 │
 └── openclaw-workspace/     # Shared workspace (bind mount)
@@ -132,10 +142,25 @@ In Cline settings:
 
 OpenClaw usa o 9router como provider customizado (`9router/free-all`). Execute `make openclaw-setup` após subir o gateway para extrair a chave da API e registrar o provider automaticamente.
 
+**Dois acessos disponíveis:**
+
+| Via                     | URL                      | Segurança                     |
+| ----------------------- | ------------------------ | ----------------------------- |
+| **Proxy (recomendado)** | `http://localhost:8080`  | Basic auth + proxy reverso    |
+| Gateway (direto)        | `http://localhost:18789` | Apenas token (sem basic auth) |
+
 O Control UI pede um **Gateway Token** — veja o token gerado com:
 
 ```bash
-docker exec clawbox-openclaw cat /home/node/.openclaw/openclaw.json | python3 -c "import sys,json;print(json.load(sys.stdin).get('gateway',{}).get('auth',{}).get('token',''))"
+make openclaw-token
+# ou
+docker exec clawbox-openclaw python3 -c "import json;print(json.load(open('/home/node/.openclaw/openclaw.json'))['gateway']['auth']['token'])"
+```
+
+**Credenciais do proxy:**
+
+```bash
+make openclaw-auth
 ```
 
 ### Hermes Agent (already configured)
@@ -185,10 +210,13 @@ strictly required to start the stack. Override only what you need.
 
 ### openclaw/.env
 
-| Variable                 | Default | Description              |
-| ------------------------ | ------- | ------------------------ |
-| `OPENCLAW_PORT`          | `18789` | Host port for Control UI |
-| `OPENCLAW_GATEWAY_TOKEN` | —       | Token for gateway auth   |
+| Variable                 | Default         | Description                       |
+| ------------------------ | --------------- | --------------------------------- |
+| `OPENCLAW_PORT`          | `18789`         | Host port (gateway direto)        |
+| `OPENCLAW_PROXY_PORT`    | `8080`          | Host port (nginx proxy)           |
+| `OPENCLAW_AUTH_USERNAME` | `admin`         | Nginx basic auth username         |
+| `OPENCLAW_AUTH_PASSWORD` | `clawbox-admin` | Nginx basic auth password         |
+| `ROUTER_9_API_KEY`       | —               | 9router API key (auto-preenchido) |
 
 ---
 
@@ -221,7 +249,9 @@ make clean            # down + remove volumes (WARNING: deletes data)
 make envs             # Create .env from .env.example in each folder
 
 # ── OpenClaw ────────────────────────────────────
-make openclaw-ui      # Open Control UI in browser
+make openclaw-ui      # Open Control UI via proxy (port 8080)
+make openclaw-token   # Show the gateway token
+make openclaw-auth    # Show proxy credentials
 make openclaw-onboard # Initial onboarding
 make openclaw-setup   # (Re)configure 9router provider
 
@@ -233,7 +263,8 @@ make -C openclaw logs # Logs only OpenClaw
 # ── Open dashboards ─────────────────────────────
 open http://localhost:20128/dashboard   # 9Router
 open http://localhost:4999              # Hermes
-open http://localhost:18789             # OpenClaw Control UI
+open http://localhost:8080              # OpenClaw (via proxy, recomendado)
+open http://localhost:18789             # OpenClaw (gateway direto)
 ```
 
 ---

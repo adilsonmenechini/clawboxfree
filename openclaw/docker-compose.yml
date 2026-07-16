@@ -1,11 +1,11 @@
 # ============================================================
 # Clawbox — OpenClaw (Personal Assistant)
 # Imagem oficial: ghcr.io/openclaw/openclaw
-# Gateway + Control UI + CLI
+# Gateway + Control UI + CLI + Proxy (nginx)
 # ============================================================
 #
 # Uso:
-#   docker compose -p clawbox up -d          # sobe o gateway
+#   docker compose -p clawbox up -d          # sobe o gateway + proxy
 #   docker compose -p clawbox run --rm openclaw-cli onboard
 #   docker compose -p clawbox down
 #
@@ -13,8 +13,18 @@
 # Env: .env
 #
 # Acessos:
-#   OpenClaw Control UI: http://127.0.0.1:18789 (gateway direto)
-#   Gateway token no openclaw.json (veja make openclaw-ui ou docker logs)
+#   Clawbox (recomendado):   http://127.0.0.1:${OPENCLAW_PROXY_PORT:-8080}
+#     Basic auth + proxy para o gateway. Entre o token na UI.
+#   Gateway (direto):        http://127.0.0.1:${OPENCLAW_PORT:-18789}
+#     Sem basic auth, útil para health checks e troubleshooting.
+#
+# Credenciais do proxy:
+#   OPENCLAW_AUTH_USERNAME (default: admin)
+#   OPENCLAW_AUTH_PASSWORD (definir no .env)
+#
+# Gateway token:
+#   docker compose -p clawbox exec openclaw \
+#     sh -c "cat /home/node/.openclaw/openclaw.json | grep -o '\"token\": \"[^\"]*\"'"
 # ============================================================
 
 services:
@@ -73,6 +83,35 @@ services:
     networks:
       - clawbox-net
     entrypoint: ["openclaw"]
+
+  # ──────────────────────────────────────────────
+  # OpenClaw Proxy — Nginx sidecar com basic auth
+  # Acesso recomendado: http://127.0.0.1:8080
+  # Credenciais: admin / OPENCLAW_AUTH_PASSWORD
+  # ──────────────────────────────────────────────
+  openclaw-proxy:
+    image: nginx:alpine
+    container_name: clawbox-openclaw-proxy
+    restart: unless-stopped
+    pull_policy: missing
+    ports:
+      - "127.0.0.1:${OPENCLAW_PROXY_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/entrypoint.sh:/docker-entrypoint.d/20-auth.sh:ro
+    environment:
+      - OPENCLAW_AUTH_USERNAME=${OPENCLAW_AUTH_USERNAME:-admin}
+      - OPENCLAW_AUTH_PASSWORD=${OPENCLAW_AUTH_PASSWORD:-}
+    networks:
+      - clawbox-net
+    depends_on:
+      openclaw:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   clawbox-net:

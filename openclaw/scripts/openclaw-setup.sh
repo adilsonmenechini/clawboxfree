@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
 # ============================================================
-# openclaw-setup.sh — Configura provider 9router no OpenClaw
+# openclaw-setup.sh — Sincroniza chave 9router com OpenClaw
 #
-# O configure.js da imagem coollabsio/openclaw já mapeia as
-# env vars (OPENCLAW_GATEWAY_TOKEN, OPENCLAW_PRIMARY_MODEL,
-# OPENCLAW_ALLOWED_ORIGINS, AUTH_PASSWORD etc.) para o
-# openclaw.json automaticamente na inicialização.
-#
-# Este script apenas sincroniza a chave da API do 9router
-# (extraída do banco SQLite) com o config do OpenClaw.
+# Escreve a chave da API do 9router no .env como ROUTER_9_API_KEY
+# e configura o openclaw.json para referenciá-la via env var.
+# O segredo nunca fica no openclaw.json — só no .env (gitignored).
 # ============================================================
 set -euo pipefail
 
 CLAWBOX_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$CLAWBOX_DIR/.env"
 
 echo "=== Verificando chave da API do 9router ==="
 
@@ -40,15 +37,26 @@ s.close();
 fi
 
 echo ""
-echo "=== Sincronizando chave no OpenClaw ==="
+echo "=== Escrevendo chave no .env ==="
 
-# Usa o CLI oficial para atualizar a chave no config
-# (mais seguro que manipular o volume manualmente)
+# Atualiza ou adiciona ROUTER_9_API_KEY no .env
+if grep -q '^ROUTER_9_API_KEY=' "$ENV_FILE" 2>/dev/null; then
+    sed -i '' "s|^ROUTER_9_API_KEY=.*|ROUTER_9_API_KEY=$KEY|" "$ENV_FILE"
+else
+    echo "" >> "$ENV_FILE"
+    echo "ROUTER_9_API_KEY=$KEY" >> "$ENV_FILE"
+fi
+echo "ROUTER_9_API_KEY atualizado no .env"
+
+echo ""
+echo "=== Sincronizando ref no OpenClaw (CLI) ==="
+
+# Seta o config para referenciar a env var em vez de guardar o literal
 docker compose -p clawbox run --rm openclaw-cli \
-    config set models.providers.9router.apiKey "$KEY" --strict-json 2>/dev/null || {
-    echo "Aviso: config set falhou — tentando via volume..."
-    # Fallback: se o config ainda não existe (onboarding não feito),
-    # usa o Python no container
+    config set models.providers.9router.apiKey \
+    --ref-provider default --ref-source env --ref-id ROUTER_9_API_KEY 2>/dev/null || {
+    echo "Aviso: config set falhou — tentando fallback Python..."
+    # Fallback: escreve o ref direto no JSON via Python
     docker exec clawbox-openclaw python3 -c "
 import json, os
 config_path = os.environ.get('OPENCLAW_CONFIG_PATH',
@@ -65,7 +73,7 @@ cfg['models']['mode'] = 'merge'
 cfg['models']['providers'] = cfg['models'].get('providers', {})
 cfg['models']['providers']['9router'] = {
     'baseUrl': 'http://9router:20128/v1',
-    'apiKey': '$KEY',
+    'apiKey': {'source': 'env', 'provider': 'default', 'id': 'ROUTER_9_API_KEY'},
     'api': 'openai-completions',
     'models': [
         {'id': 'free-all', 'name': 'free-all', 'contextWindow': 128000, 'maxTokens': 16384, 'input': ['text']},
@@ -74,7 +82,7 @@ cfg['models']['providers']['9router'] = {
 }
 with open(config_path, 'w') as f:
     json.dump(cfg, f, indent=2)
-print('Configuracao escrita com sucesso')
+print('Ref escrito com sucesso via fallback')
 "
 }
 
@@ -84,4 +92,4 @@ docker kill --signal=USR1 clawbox-openclaw 2>/dev/null || \
     docker restart clawbox-openclaw >/dev/null
 
 echo ""
-echo "✅ OpenClaw configurado com 9router/free-all"
+echo "✅ OpenClaw configurado — chave 9router em .env (ROUTER_9_API_KEY), config com ref"

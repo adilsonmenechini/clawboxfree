@@ -20,7 +20,7 @@ COMPOSE_PROVIDERS := -f providers/docker-compose.yml
 COMPOSE_HERMES   := -f hermes/docker-compose.yml
 COMPOSE_OPENCLAW := -f openclaw/docker-compose.yml
 
-.PHONY: help providers hermes openclaw-cli openclaw-ui openclaw-onboard openclaw-setup openclaw all down down-hermes down-openclaw logs ps build pull config clean envs
+.PHONY: help providers hermes openclaw-cli openclaw-ui openclaw-token openclaw-auth openclaw-onboard openclaw-setup openclaw all down down-hermes down-openclaw logs ps build pull config clean envs
 
 help: ## Mostra esta ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -35,8 +35,14 @@ hermes: ## Hermes (gateway + dashboard) — depende de providers
 openclaw-cli: ## OpenClaw gateway
 	$(MAKE) -C openclaw up
 
-openclaw-ui: ## Abre o Control UI do OpenClaw no navegador
-	open http://127.0.0.1:18789
+openclaw-ui: ## Abre o Control UI do OpenClaw via proxy (porta 8080)
+	open http://127.0.0.1:${OPENCLAW_PROXY_PORT:-8080}
+
+openclaw-token: ## Mostra o gateway token
+	$(MAKE) -C openclaw token
+
+openclaw-auth: ## Mostra credenciais do proxy
+	$(MAKE) -C openclaw auth-password
 
 openclaw-onboard: ## Onboarding inicial do OpenClaw
 	$(MAKE) -C openclaw onboard
@@ -46,9 +52,10 @@ openclaw-setup: ## Configura o provider 9router no OpenClaw
 
 openclaw: ## Configura todos as etapas do OpenClaw (onboard + setup)
 	$(MAKE) -C openclaw up
+	$(OPENCLAW_COMPOSE_SLEEP:-sleep 10) 2>/dev/null || sleep 10
 	$(MAKE) -C openclaw setup
 	$(MAKE) -C openclaw onboard
-	open http://127.0.0.1:18789
+	open http://127.0.0.1:${OPENCLAW_PROXY_PORT:-8080}
 
 all: ## Tudo (providers + hermes + openclaw)
 	$(MAKE) providers

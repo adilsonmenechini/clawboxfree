@@ -1,35 +1,15 @@
 # ──────────────────────────────────────────────────────────
 # Pre-commit hooks for Clawbox
-# Install: pre-commit install
-# Run all: pre-commit run --all-files
 # ──────────────────────────────────────────────────────────
 repos:
-  # ── Ruff: Python linter + formatter ──────────────────────
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.5
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.3
     hooks:
-      - id: ruff
-        name: ruff lint
-        description: "Run Ruff linter on Python files"
-        args: [--fix, --exit-non-zero-on-fix]
-        files: ^ai-free/
-        types_or: [python, pyi]
-      - id: ruff-format
-        name: ruff format
-        description: "Run Ruff formatter on Python files"
-        files: ^ai-free/
-        types_or: [python, pyi]
-
-  # ── Pyright: Python static type checker ──────────────────
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.407
-    hooks:
-      - id: pyright
-        name: pyright
-        description: "Run pyright type checker on Python files"
-        args: [--project, ai-free/pyproject.toml]
-        files: ^ai-free/
-        types_or: [python, pyi]
+      - id: prettier
+        name: prettier
+        description: "Format code with Prettier"
+        additional_dependencies: [prettier@3.0.3]
+        args: [--write, --ignore-unknown]
 
   # ── Gitleaks: Git secrets scanner ────────────────────────
   - repo: https://github.com/gitleaks/gitleaks

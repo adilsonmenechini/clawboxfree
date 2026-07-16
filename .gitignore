@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 .venv/
 openclaw-workspace/*
+providers/data/logs/
+providers/data/db/backups/
+*.sqlite-shm
+*.sqlite-wal
+providers/data/jwt-secret
+openclaw/openclaw-workspace

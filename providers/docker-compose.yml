@@ -32,7 +32,7 @@ services:
     ports:
       - "${ROUTER_PORT:-20128}:20128"
     volumes:
-      - 9router-data:/app/data
+      - ./data:/app/data
     environment:
       - DATA_DIR=/app/data
       - HEADROOM_URL=http://headroom:8787
@@ -110,7 +110,5 @@ networks:
     driver: bridge
 
 volumes:
-  9router-data:
-    name: clawbox-9router-data
   dind-data:
     name: clawbox-dind-data

@@ -18,7 +18,7 @@ help: ## Mostra esta ajuda
 		awk 'BEGIN {FS = ":.*?## "} {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 up: ## Sobe 9router + headroom + dind
-	$(COMPOSE) up -d
+	$(COMPOSE) up -d --build
 
 down: ## Remove containers (volumes preservados)
 	$(COMPOSE) down

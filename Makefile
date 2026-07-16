@@ -46,8 +46,8 @@ openclaw-setup: ## Configura o provider 9router no OpenClaw
 
 openclaw: ## Configura todos as etapas do OpenClaw (onboard + setup)
 	$(MAKE) -C openclaw up
-	$(MAKE) -C openclaw onboard
 	$(MAKE) -C openclaw setup
+	$(MAKE) -C openclaw onboard
 	open http://127.0.0.1:18789
 
 all: ## Tudo (providers + hermes + openclaw)
@@ -90,4 +90,4 @@ config: ## Valida e mostra todos os composes resolvidos
 	$(COMPOSE_PREFIX) $(COMPOSE_PROVIDERS) $(COMPOSE_HERMES) $(COMPOSE_OPENCLAW) config
 
 clean: ## Remove tudo (containers + rede + volumes)
-	$(COMPOSE_PREFIX) $(COMPOSE_PROVIDERS) $(COMPOSE_HERMES) $(COMPOSE_OPENCLAW) down -v
+	$(COMPOSE_PREFIX) $(COMPOSE_PROVIDERS) $(COMPOSE_HERMES) $(COMPOSE_OPENCLAW) down -v --remove-orphans

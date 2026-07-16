@@ -18,7 +18,7 @@ help: ## Mostra esta ajuda
 		awk 'BEGIN {FS = ":.*?## "} {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 up: ## Sobe o Hermes Agent
-	$(COMPOSE) up -d
+	$(COMPOSE) up -d --build
 
 down: ## Remove o container (volume preservado)
 	$(COMPOSE) down

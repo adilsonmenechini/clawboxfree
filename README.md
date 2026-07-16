@@ -188,7 +188,6 @@ strictly required to start the stack. Override only what you need.
 | Variable                 | Default | Description              |
 | ------------------------ | ------- | ------------------------ |
 | `OPENCLAW_PORT`          | `18789` | Host port for Control UI |
-| `OPENAI_API_KEY`         | —       | 9router API key          |
 | `OPENCLAW_GATEWAY_TOKEN` | —       | Token for gateway auth   |
 
 ---

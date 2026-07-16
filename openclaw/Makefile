@@ -4,7 +4,8 @@
 # ============================================================
 #
 # Uso:
-#   make up              # sobe gateway + proxy
+#   make flow            # FLOW ÚNICO: sobe + onboard + setup + credenciais
+#   make up              # só sobe gateway + proxy
 #   make down            # remove containers
 #   make onboard         # onboarding inicial
 #   make setup           # configura provider 9router
@@ -14,7 +15,7 @@
 
 COMPOSE := docker compose -p clawbox
 
-.PHONY: help up down onboard setup logs ps build pull config token auth-password
+.PHONY: help up down onboard setup flow logs ps build pull config token auth-password
 
 help: ## Mostra esta ajuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -31,6 +32,27 @@ onboard: ## Onboarding inicial (automático, não-interativo)
 
 setup: scripts/openclaw-setup.sh ## Configura provider 9router no OpenClaw
 	@bash scripts/openclaw-setup.sh
+
+flow: ## Flow único: sobe + onboard + setup + credenciais
+	@echo "============================================"
+	@echo " 🐾 Clawbox - OpenClaw Unified Flow"
+	@echo "============================================"
+	$(MAKE) up
+	@echo ""
+	@echo "=== 1/4 Onboarding ==="
+	$(MAKE) onboard
+	@echo ""
+	@echo "=== 2/4 Configurando provider 9router ==="
+	$(MAKE) setup
+	@echo ""
+	@echo "=== 3/4 Credenciais ==="
+	$(MAKE) token
+	$(MAKE) auth-password
+	@echo ""
+	@echo "=== 4/4 Acessos ==="
+	@echo "  Proxy (recomendado): http://127.0.0.1:$$(grep -m1 '^OPENCLAW_PROXY_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8080)"
+	@echo "  Gateway (direto):    http://127.0.0.1:$$(grep -m1 '^OPENCLAW_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 18789)"
+	@echo "============================================"
 
 token: ## Mostra o gateway token (para a Control UI)
 	@echo "Gateway token:"

@@ -27,20 +27,10 @@ make providers
 # 4. Start Hermes (depends on 9router + dind)
 make hermes
 
-# 5. Start OpenClaw (depends on 9router)
+# 5. OpenClaw — flow único (sobe + onboard + setup + credenciais):
 make openclaw
 
-# 6. Configure 9router provider no OpenClaw (extrai a chave automagicamente)
-make openclaw-setup
-
-# 7. Pegue a senha do proxy e o gateway token
-make openclaw-auth    # mostra credenciais basic auth
-make openclaw-token   # mostra o gateway token
-
-# 8. Abra o Clawbox via proxy (recomendado):
-open http://localhost:8080
-
-# 7. Follow logs
+# 6. Follow logs
 make logs
 ```
 

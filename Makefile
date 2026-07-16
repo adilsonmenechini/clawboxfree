@@ -4,14 +4,11 @@
 # ============================================================
 #
 # Uso:
+#   make openclaw         # FLOW ÚNICO: sobe + onboard + setup + credenciais
 #   make providers        # núcleo: 9router + headroom + dind
 #   make hermes           # Hermes (gateway + dashboard)
-#   make openclaw         # OpenClaw completo (onboard + setup + UI)
-#   make openclaw-cli     # só o gateway
 #   make all              # sobe tudo
 #   make down             # remove tudo
-#   make down-hermes      # só Hermes
-#   make down-openclaw    # só OpenClaw
 #   make logs svc=openclaw
 # ============================================================
 
@@ -50,11 +47,26 @@ openclaw-onboard: ## Onboarding inicial do OpenClaw
 openclaw-setup: ## Configura o provider 9router no OpenClaw
 	$(MAKE) -C openclaw setup
 
-openclaw: ## Configura todos as etapas do OpenClaw (onboard + setup)
+openclaw: ## FLOW ÚNICO: sobe + onboard + setup + credenciais + abre navegador
+	@echo "============================================"
+	@echo " 🐾 Clawbox - OpenClaw Unified Flow"
+	@echo "============================================"
 	$(MAKE) -C openclaw up
-	$(OPENCLAW_COMPOSE_SLEEP:-sleep 10) 2>/dev/null || sleep 10
-	$(MAKE) -C openclaw setup
+	@echo ""
+	@echo "=== 1/4 Onboarding ==="
 	$(MAKE) -C openclaw onboard
+	@echo ""
+	@echo "=== 2/4 Configurando provider 9router ==="
+	$(MAKE) -C openclaw setup
+	@echo ""
+	@echo "=== 3/4 Credenciais ==="
+	$(MAKE) openclaw-token
+	$(MAKE) openclaw-auth
+	@echo ""
+	@echo "=== 4/4 Acessos ==="
+	@echo "  Proxy (recomendado): http://127.0.0.1:${OPENCLAW_PROXY_PORT:-8080}"
+	@echo "  Gateway (direto):    http://127.0.0.1:${OPENCLAW_PORT:-18789}"
+	@echo "============================================"
 	open http://127.0.0.1:${OPENCLAW_PROXY_PORT:-8080}
 
 all: ## Tudo (providers + hermes + openclaw)

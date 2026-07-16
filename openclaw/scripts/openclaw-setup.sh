@@ -87,9 +87,29 @@ print('Ref escrito com sucesso via fallback')
 }
 
 echo ""
+echo "=== Sincronizando gateway token ==="
+
+# Extrai o token do config e salva no .env
+TOKEN=$(docker exec clawbox-openclaw python3 -c "
+import json
+with open('/home/node/.openclaw/openclaw.json') as f:
+    cfg = json.load(f)
+print(cfg.get('gateway', {}).get('auth', {}).get('token', ''))
+" 2>/dev/null || true)
+
+if [ -n "$TOKEN" ] && [ "$TOKEN" != "clawbox-init-token" ]; then
+    if grep -q '^OPENCLAW_GATEWAY_TOKEN=' "$ENV_FILE" 2>/dev/null; then
+        sed -i '' "s|^OPENCLAW_GATEWAY_TOKEN=.*|OPENCLAW_GATEWAY_TOKEN=$TOKEN|" "$ENV_FILE"
+    else
+        echo "" >> "$ENV_FILE"
+        echo "OPENCLAW_GATEWAY_TOKEN=$TOKEN" >> "$ENV_FILE"
+    fi
+    echo "Gateway token sincronizado no .env"
+fi
+
+echo ""
 echo "=== Reiniciando gateway OpenClaw ==="
-docker kill --signal=USR1 clawbox-openclaw 2>/dev/null || \
-    docker restart clawbox-openclaw >/dev/null
+docker compose -p clawbox restart openclaw >/dev/null 2>&1
 
 echo ""
 echo "✅ OpenClaw configurado — chave 9router em .env (ROUTER_9_API_KEY), config com ref"

@@ -39,6 +39,15 @@ services:
     container_name: clawbox-openclaw
     restart: unless-stopped
     pull_policy: missing
+    command:
+      [
+        "node",
+        "openclaw.mjs",
+        "gateway",
+        "--allow-unconfigured",
+        "--bind",
+        "lan",
+      ]
     env_file: .env
     volumes:
       - openclaw-state:/home/node/.openclaw
@@ -105,8 +114,7 @@ services:
     networks:
       - clawbox-net
     depends_on:
-      openclaw:
-        condition: service_healthy
+      - openclaw
     logging:
       driver: json-file
       options:

@@ -1,14 +1,14 @@
 # 📦 Clawbox
 
-> **Hermes Agent + 9Router** — Free AI coding stack via Docker Compose
+> **Hermes Agent + 9Router + OpenClaw** — Free AI coding stack via Docker Compose
 
-Clawbox combines two powerful open-source tools:
+Clawbox combines three powerful open-source tools running as separate service stacks:
 
-| Service | Description | Port |
-|---------|-------------|------|
-| **[9router](https://github.com/decolua/9router)** | OpenAI-compatible proxy with 40+ free providers, auto-fallback, RTK token saver | `20128` |
-| **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** | Self-improving AI agent by NousResearch, pointed at 9router | Dashboard `4999` |
-| **[DinD](https://hub.docker.com/_/docker)** | Docker-in-Docker sandbox — create containers inside a container via remote API | `2375` |
+| Stack         | Services                           | Folder       | Ports              |
+| ------------- | ---------------------------------- | ------------ | ------------------ |
+| **providers** | 9router + Headroom + DinD          | `providers/` | `20128`            |
+| **hermes**    | Hermes Agent (gateway + dashboard) | `hermes/`    | Dashboard `4999`   |
+| **openclaw**  | OpenClaw (gateway + CLI)           | `openclaw/`  | Control UI `18789` |
 
 ---
 
@@ -18,15 +18,55 @@ Clawbox combines two powerful open-source tools:
 # 1. Clone or enter the directory
 cd clawbox
 
-# 2. Configure your environment
-cp .env.example .env
+# 2. Configure environment (opcional — tudo tem default)
+make envs
 
-# 3. Start everything
-docker compose up -d
+# 3. Start providers (9router + headroom + dind)
+make providers
 
-# 4. Follow logs
-docker compose logs -f
+# 4. Start Hermes (depends on 9router + dind)
+make hermes
+
+# 5. Start OpenClaw (depends on 9router)
+make openclaw
+
+# 6. Configure 9router provider no OpenClaw (extrai a chave automagicamente)
+make openclaw-setup
+
+# 7. Follow logs
+make logs
 ```
+
+---
+
+## 📁 Project Structure
+
+```
+clawbox/
+├── .env.example            # Shared vars (opcional)
+├── Makefile                # Root orchestrator
+│
+├── providers/              # Core infrastructure
+│   ├── .env / .env.example
+│   ├── docker-compose.yml  # 9router + headroom + dind
+│   └── Makefile
+│
+├── hermes/                 # Hermes Agent
+│   ├── .env / .env.example
+│   ├── docker-compose.yml  # hermes (gateway + dashboard)
+│   └── Makefile
+│
+├── openclaw/               # OpenClaw
+│   ├── .env / .env.example
+│   ├── docker-compose.yml  # openclaw + openclaw-cli
+│   ├── Makefile
+│   └── scripts/openclaw-setup.sh
+│
+└── openclaw-workspace/     # Shared workspace (bind mount)
+```
+
+Each folder is self-contained — it has its own `docker-compose.yml`, `Makefile`,
+and `.env` (runtime + compose variable substitution).
 
 ---
 
@@ -40,15 +80,20 @@ docker compose logs -f
   │   9router     │  ← OpenAI-compatible API at :20128
   │  (port 20128) │     Auto-fallback across 40+ providers
   │               │     RTK token saver (-20~40% tokens)
-  └───────┬───────┘
-          │ internal network
-          ▼
-  ┌───────────────┐
-  │ Hermes Agent  │  ← Self-improving AI agent
-  │  (dashboard   │     Telegram / Discord / CLI gateway
-  │  :4999 local) │     Skills, memory, scheduled automations
-  └───────────────┘
+  └───┬───────┬───┘
+      │       │ internal network (clawbox-net)
+      ▼       ▼
+  ┌──────────┐  ┌──────────────┐
+  │ Hermes   │  │ OpenClaw     │
+  │ Agent    │  │ (Control UI  │
+  │(dashboard│  │  :18789      │
+  │ :4999)   │  │  local)      │
+  └──────────┘  └──────────────┘
 ```
+
+Services communicate over a shared Docker bridge network (`clawbox-net`),
+defined in `providers/docker-compose.yml` and declared as `external: true`
+in the other stacks.
 
 ---
 
@@ -62,69 +107,134 @@ API Key:   sk-free-via-9router   (any string works)
 ```
 
 ### Claude Code
+
 ```bash
 claude config set --global api_base_url http://localhost:20128/v1
 claude config set --global api_key sk-free-via-9router
 ```
 
 ### Cursor
+
 In Cursor settings → Models → OpenAI API:
+
 - **Base URL:** `http://localhost:20128/v1`
 - **API Key:** `sk-free-via-9router`
 
 ### Cline (VS Code Extension)
+
 In Cline settings:
+
 - **API Provider:** OpenAI Compatible
 - **Base URL:** `http://localhost:20128/v1`
 - **API Key:** `sk-free-via-9router`
 
+### OpenClaw (configurado via setup)
+
+OpenClaw usa o 9router como provider customizado (`9router/free-all`). Execute `make openclaw-setup` após subir o gateway para extrair a chave da API e registrar o provider automaticamente.
+
+O Control UI pede um **Gateway Token** — veja o token gerado com:
+
+```bash
+docker exec clawbox-openclaw cat /home/node/.openclaw/openclaw.json | python3 -c "import sys,json;print(json.load(sys.stdin).get('gateway',{}).get('auth',{}).get('token',''))"
+```
+
 ### Hermes Agent (already configured)
+
 Hermes is pre-configured to use `http://9router:20128/v1` inside Docker.
 
 ---
 
 ## ⚙️ Configuration
 
-Edit `.env` to customize:
+Each stack has its own `.env` file. Examples are provided as `.env.example`:
 
-```env
-TZ=America/Sao_Paulo
-ROUTER_PORT=20128
-HERMES_DASHBOARD_PORT=4999
-HERMES_DASHBOARD_PASSWORD=   # optional, secures the dashboard
-HERMES_DEFAULT_MODEL=gemini-2.0-flash
-TELEGRAM_BOT_TOKEN=          # optional
-DISCORD_BOT_TOKEN=           # optional
+```bash
+# Create .env from examples (already done if you ran make envs)
+cp providers/.env.example providers/.env
+cp hermes/.env.example hermes/.env
+cp openclaw/.env.example openclaw/.env
 ```
+
+Or use the shortcut:
+
+```bash
+make envs
+```
+
+All variables in the compose files have sensible defaults — no `.env` is
+strictly required to start the stack. Override only what you need.
+
+### providers/.env
+
+| Variable       | Default | Description               |
+| -------------- | ------- | ------------------------- |
+| `ROUTER_PORT`  | `20128` | Host port for 9router API |
+| `ROUTER_DEBUG` | `false` | Enable debug logging      |
+
+### hermes/.env
+
+| Variable                    | Default      | Description                   |
+| --------------------------- | ------------ | ----------------------------- |
+| `HERMES_DASHBOARD_PORT`     | `4999`       | Host port for dashboard       |
+| `HERMES_DASHBOARD_USERNAME` | `admin`      | Dashboard basic auth          |
+| `HERMES_DASHBOARD_PASSWORD` | `admin`      | Dashboard basic auth          |
+| `OPENAI_API_KEY`            | —            | 9router API key               |
+| `HERMES_DEFAULT_MODEL`      | `model-free` | Default LLM model             |
+| `TELEGRAM_BOT_TOKEN`        | —            | Optional Telegram integration |
+| `DISCORD_BOT_TOKEN`         | —            | Optional Discord integration  |
+
+### openclaw/.env
+
+| Variable                 | Default | Description              |
+| ------------------------ | ------- | ------------------------ |
+| `OPENCLAW_PORT`          | `18789` | Host port for Control UI |
+| `OPENAI_API_KEY`         | —       | 9router API key          |
+| `OPENCLAW_GATEWAY_TOKEN` | —       | Token for gateway auth   |
 
 ---
 
 ## 📊 Useful Commands
 
 ```bash
-# Start services
-docker compose up -d
+# ── Up ──────────────────────────────────────────
+make providers        # Core: 9router + headroom + dind
+make hermes           # Hermes (gateway + dashboard)
+make openclaw         # OpenClaw
+make openclaw-setup   # Configure 9router provider (auto-extracts key)
+make all              # Everything
 
-# Stop services
-docker compose down
+# ── Down ────────────────────────────────────────
+make down             # Remove all containers (volumes preserved)
+make down-hermes      # Only Hermes
+make down-openclaw    # Only OpenClaw
 
-# View real-time logs
-docker compose logs -f
+# ── Logs ────────────────────────────────────────
+make logs             # All services
+make logs svc=9router # Only 9router
+make logs svc=hermes  # Only Hermes
+make logs svc=openclaw# Only OpenClaw
 
-# View 9router logs only
-docker compose logs -f 9router
+# ── Maintenance ─────────────────────────────────
+make ps               # List containers
+make pull             # Pull updated images
+make build            # Rebuild local images
+make clean            # down + remove volumes (WARNING: deletes data)
+make envs             # Create .env from .env.example in each folder
 
-# View Hermes logs only
-docker compose logs -f hermes
+# ── OpenClaw ────────────────────────────────────
+make openclaw-ui      # Open Control UI in browser
+make openclaw-onboard # Initial onboarding
+make openclaw-setup   # (Re)configure 9router provider
 
-# Restart a single service
-docker compose restart 9router
+# ── Individual stacks ───────────────────────────
+make -C providers up  # Start only providers
+make -C hermes down   # Stop only Hermes
+make -C openclaw logs # Logs only OpenClaw
 
-# Pull latest images and restart
-docker compose pull && docker compose up -d
-
-# Open Hermes dashboard (in browser)
-open http://localhost:4999
+# ── Open dashboards ─────────────────────────────
+open http://localhost:20128/dashboard   # 9Router
+open http://localhost:4999              # Hermes
+open http://localhost:18789             # OpenClaw Control UI
 ```
 
 ---
@@ -146,8 +256,8 @@ vai automaticamente parar dentro do sandbox — sem configuração extra.
 
 ```bash
 # Testar a conexão do Hermes com o DinD
-docker exec clawbox-hermes-gateway docker info
-docker exec clawbox-hermes-gateway docker run --rm alpine echo "sandbox ativo"
+docker exec clawbox-hermes docker info
+docker exec clawbox-hermes docker run --rm alpine echo "sandbox ativo"
 ```
 
 ### Connect from your machine
@@ -176,9 +286,9 @@ docker ps
 ### Reset the sandbox
 
 ```bash
-docker compose down dind
-docker volume rm clawbox_dind-data
-docker compose up -d dind
+docker compose -p clawbox -f providers/docker-compose.yml down dind
+docker volume rm clawbox-dind-data
+make providers
 ```
 
 ### ⚠️ Security
@@ -191,9 +301,9 @@ docker compose up -d dind
 
 ## 🔒 Security Notes
 
-- The Hermes dashboard (`4999`) is **exposed on all network interfaces** — anyone who reaches the server IP can access it.
-- The dashboard stores API keys; **set a strong `HERMES_DASHBOARD_PASSWORD` in `.env`**.
-- For an additional layer of security, restrict access at the firewall level.
+- All dashboards and UIs bind to `127.0.0.1` (loopback only) — accessible only from the local machine.
+- To access remotely, use an SSH tunnel: `ssh -L 4999:localhost:4999 user@server`
+- The dashboard stores API keys; **set a strong `HERMES_DASHBOARD_PASSWORD` in `hermes/.env`**.
 
 ---
 
@@ -201,4 +311,5 @@ docker compose up -d dind
 
 - [Hermes Agent Docs](https://hermes-agent.nousresearch.com/docs/)
 - [9Router GitHub](https://github.com/decolua/9router)
+- [OpenClaw GitHub](https://github.com/openclaw/openclaw)
 - [NousResearch Discord](https://discord.gg/NousResearch)

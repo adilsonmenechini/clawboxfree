@@ -1,0 +1,61 @@
+# ============================================================
+# Clawbox — Hermes Agent
+# Gateway + dashboard da NousResearch num único container (s6-overlay)
+# ============================================================
+#
+# Uso:
+#   docker compose -p clawbox up -d
+#   docker compose -p clawbox down
+#
+# Depende de: 9router (saudável) + dind (saudável) — inicie providers/ primeiro
+# Env: .env-hermes
+#
+# Acessos:
+#   Hermes Dashboard:   http://127.0.0.1:4999 (bind local, basic auth)
+# ============================================================
+
+services:
+  # ──────────────────────────────────────────────
+  # Hermes Agent — gateway + dashboard no MESMO container
+  # Imagem oficial: nousresearch/hermes-agent
+  # ENTRYPOINT é /init (s6-overlay) — não sobrescrever.
+  # Dependências (9router + dind) devem estar rodando antes.
+  # ──────────────────────────────────────────────
+  hermes:
+    image: nousresearch/hermes-agent:${HERMES_TAG:-latest}
+    container_name: clawbox-hermes
+    restart: unless-stopped
+    pull_policy: missing
+    env_file: .env
+    volumes:
+      - hermes-data:/opt/data
+      - ../hermes-workspace:/opt/data/workspace
+    environment:
+      - HERMES_UID=${HERMES_UID:-1000}
+      - HERMES_GID=${HERMES_GID:-1000}
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${HERMES_DASHBOARD_USERNAME:-admin}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${HERMES_DASHBOARD_PASSWORD:-admin}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-ollama}
+      - KILOCODE_API_KEY=${KILO_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+    command: ["gateway", "run"]
+    ports:
+      - "127.0.0.1:${HERMES_DASHBOARD_PORT:-4999}:9119"
+      # - "127.0.0.1:8642:8642"  # API do gateway, só se precisar externamente
+    networks:
+      - clawbox-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  clawbox-net:
+    name: clawbox-net
+    external: true
+
+volumes:
+  hermes-data:
+    name: clawbox-hermes-data

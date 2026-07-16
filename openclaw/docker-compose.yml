@@ -1,0 +1,83 @@
+# ============================================================
+# Clawbox — OpenClaw (Personal Assistant)
+# Gateway + Control UI + CLI container
+# ============================================================
+#
+# Uso:
+#   docker compose -p clawbox up -d          # sobe o gateway
+#   docker compose -p clawbox run --rm openclaw-cli onboard
+#   docker compose -p clawbox down
+#
+# Depende de: 9router (saudável) — inicie providers/ primeiro
+# Env: .env-openclaw
+#
+# Acessos:
+#   OpenClaw Control UI: http://127.0.0.1:18789 (bind local, token na URL)
+# ============================================================
+
+services:
+  # ──────────────────────────────────────────────
+  # OpenClaw — Gateway do assistente pessoal
+  # Imagem oficial: ghcr.io/openclaw/openclaw (mirror: openclaw/openclaw)
+  # Control UI própria: http://127.0.0.1:18789 (autenticação por token)
+  # Estado persistente em /home/node/.openclaw — nunca rode com
+  # /home/node/.openclaw efêmero, é onde ficam memória, config e tokens.
+  # ──────────────────────────────────────────────
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:${OPENCLAW_TAG:-latest}
+    container_name: clawbox-openclaw
+    restart: unless-stopped
+    pull_policy: missing
+    env_file: .env
+    volumes:
+      - openclaw-state:/home/node/.openclaw
+      - ../openclaw-workspace:/home/node/.openclaw/workspace
+    environment:
+      - PUID=${OPENCLAW_UID:-1000}
+      - PGID=${OPENCLAW_GID:-1000}
+    ports:
+      - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
+    networks:
+      - clawbox-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:18789/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ──────────────────────────────────────────────
+  # OpenClaw CLI — não sobe com "up -d" (profile "cli").
+  # Uso: docker compose -p clawbox run --rm openclaw-cli <comando>
+  # Ex.: onboard | channels add --channel telegram --token "<t>"
+  #      | pairing approve telegram <CODE> | dashboard --no-open
+  # ──────────────────────────────────────────────
+  openclaw-cli:
+    image: ghcr.io/openclaw/openclaw:${OPENCLAW_TAG:-latest}
+    container_name: clawbox-openclaw-cli
+    profiles: ["cli"]
+    env_file: .env
+    volumes:
+      - openclaw-state:/home/node/.openclaw
+      - ../openclaw-workspace:/home/node/.openclaw/workspace
+    environment:
+      - PUID=${OPENCLAW_UID:-1000}
+      - PGID=${OPENCLAW_GID:-1000}
+      - OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1 # Docker network, não exposto externamente
+    networks:
+      - clawbox-net
+    entrypoint: ["openclaw"]
+
+networks:
+  clawbox-net:
+    name: clawbox-net
+    external: true
+
+volumes:
+  openclaw-state:
+    name: clawbox-openclaw-state

@@ -9,3 +9,4 @@ openclaw-workspace/*
 *.sqlite-wal
 providers/data
 openclaw/openclaw-workspace
+data.sqlite

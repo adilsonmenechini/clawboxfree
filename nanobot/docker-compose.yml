@@ -1,0 +1,112 @@
+# ============================================================
+# Clawbox — Nanobot (HKUDS Nanobot)
+# Lightweight personal AI assistant
+# Gateway + API Server + CLI
+# ============================================================
+#
+# Uso:
+#   docker compose -p clawbox up -d          # sobe gateway + api
+#   docker compose -p clawbox run --rm nanobot-cli <comando>
+#   docker compose -p clawbox down
+#
+# Env: .env
+#
+# Acessos:
+#   Gateway HTTP:  http://127.0.0.1:${NANOBOT_GW_HTTP_PORT:-8765}
+#   Gateway WS:    ws://127.0.0.1:${NANOBOT_GW_WS_PORT:-18790}
+#   API Server:    http://127.0.0.1:${NANOBOT_API_PORT:-8900}
+# ============================================================
+
+x-common-config: &common-config
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      NANOBOT_VERSION: ${NANOBOT_VERSION:-latest}
+      NANOBOT_EXTRAS: ${NANOBOT_EXTRAS:-api}
+  image: clawbox-nanobot:${NANOBOT_TAG:-latest}
+  restart: unless-stopped
+  pull_policy: missing
+  env_file: .env
+  environment:
+    - HOME=/home/nanobot
+  volumes:
+    - nanobot-state:/home/nanobot/.nanobot
+  networks:
+    - clawbox-net
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  # ──────────────────────────────────────────────
+  # Nanobot Gateway — WebSocket + HTTP
+  # Interface principal para agentes e ferramentas
+  # ──────────────────────────────────────────────
+  nanobot-gateway:
+    container_name: clawbox-nanobot-gateway
+    <<: *common-config
+    command: ["gateway"]
+    ports:
+      - "127.0.0.1:${NANOBOT_GW_HTTP_PORT:-8765}:8765"
+      - "127.0.0.1:${NANOBOT_GW_WS_PORT:-18790}:18790"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -sf http://127.0.0.1:8765/health 2>/dev/null || curl -sf http://127.0.0.1:18790/health 2>/dev/null || pgrep -f 'nanobot gateway'",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────
+  # Nanobot API Server — REST endpoints
+  # Serve ferramentas, skills e workspace management
+  # ──────────────────────────────────────────────
+  nanobot-api:
+    container_name: clawbox-nanobot-api
+    <<: *common-config
+    command:
+      [
+        "serve",
+        "--host",
+        "0.0.0.0",
+        "-w",
+        "/home/nanobot/.nanobot/api-workspace",
+      ]
+    ports:
+      - "127.0.0.1:${NANOBOT_API_PORT:-8900}:8900"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8900/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ──────────────────────────────────────────────
+  # Nanobot CLI — execução sob demanda
+  # Uso: docker compose -p clawbox run --rm nanobot-cli <cmd>
+  # Ex.: nanobot-cli chat, nanobot-cli status
+  # ──────────────────────────────────────────────
+  nanobot-cli:
+    container_name: clawbox-nanobot-cli
+    <<: *common-config
+    profiles:
+      - cli
+    command: ["status"]
+    stdin_open: true
+    tty: true
+    restart: no
+
+networks:
+  clawbox-net:
+    name: clawbox-net
+    external: true
+
+volumes:
+  nanobot-state:
+    name: clawbox-nanobot-state

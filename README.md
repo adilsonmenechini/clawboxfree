@@ -1,14 +1,15 @@
 # 📦 Clawbox
 
-> **Hermes Agent + 9Router + OpenClaw** — Free AI coding stack via Docker Compose
+> **Hermes Agent + Nanobot + 9Router + OpenClaw** — Free AI coding stack via Docker Compose
 
-Clawbox combines three powerful open-source tools running as separate service stacks:
+Clawbox combines four powerful open-source tools running as separate service stacks:
 
-| Stack         | Services                           | Folder       | Ports                             |
-| ------------- | ---------------------------------- | ------------ | --------------------------------- |
-| **providers** | 9router + Headroom + DinD          | `providers/` | `20128`                           |
-| **hermes**    | Hermes Agent (gateway + dashboard) | `hermes/`    | Dashboard `4999`                  |
-| **openclaw**  | OpenClaw (gateway + proxy + CLI)   | `openclaw/`  | (proxy) `8080` / (direto) `18789` |
+| Stack         | Services                           | Folder       | Ports                                         |
+| ------------- | ---------------------------------- | ------------ | --------------------------------------------- |
+| **providers** | 9router + Headroom + DinD          | `providers/` | `20128`                                       |
+| **hermes**    | Hermes Agent (gateway + dashboard) | `hermes/`    | Dashboard `4999`                              |
+| **openclaw**  | OpenClaw (gateway + proxy + CLI)   | `openclaw/`  | (proxy) `8080` / (direto) `18789`             |
+| **nanobot**   | Nanobot (gateway + API + CLI)      | `nanobot/`   | Gateway HTTP `8765` / WS `18790` / API `8900` |
 
 ---
 
@@ -30,7 +31,13 @@ make hermes
 # 5. OpenClaw — flow único (sobe + onboard + setup + credenciais):
 make openclaw
 
-# 6. Follow logs
+# 6. Nanobot — flow único (sobe + onboard + setup 9router):
+make nanobot
+
+# 7. Interactive Nanobot agent:
+make nanobot-agent
+
+# 8. Follow logs
 make logs
 ```
 
@@ -62,6 +69,14 @@ clawbox/
 │   │   └── entrypoint.sh    # gera .htpasswd de env vars
 │   └── scripts/openclaw-setup.sh
 │
+├── nanobot/                # Nanobot (HKUDS)
+│   ├── .env / .env.example
+│   ├── Dockerfile           # pip install nanobot-ai
+│   ├── docker-compose.yml  # gateway + api server + cli
+│   ├── Makefile
+│   └── scripts/
+│       └── nanobot-setup.sh # configura provider 9router
+│
 └── openclaw-workspace/     # Shared workspace (bind mount)
 ```
 
@@ -80,15 +95,16 @@ and `.env` (runtime + compose variable substitution).
   │   9router     │  ← OpenAI-compatible API at :20128
   │  (port 20128) │     Auto-fallback across 40+ providers
   │               │     RTK token saver (-20~40% tokens)
-  └───┬───────┬───┘
-      │       │ internal network (clawbox-net)
-      ▼       ▼
-  ┌──────────┐  ┌──────────────┐
-  │ Hermes   │  │ OpenClaw     │
-  │ Agent    │  │ (Control UI  │
-  │(dashboard│  │  :18789      │
-  │ :4999)   │  │  local)      │
-  └──────────┘  └──────────────┘
+  └───┬───────┬───────┬───┘
+      │       │       │ internal network (clawbox-net)
+      ▼       ▼       ▼
+  ┌──────────┐  ┌──────────────┐  ┌───────────────┐
+  │ Hermes   │  │ OpenClaw     │  │ Nanobot       │
+  │ Agent    │  │ (Control UI  │  │ (Gateway HTTP │
+  │(dashboard│  │  :18789      │  │  :8765        │
+  │ :4999)   │  │  local)      │  │  WS :18790    │
+  └──────────┘  └──────────────┘  │  API:8900)    │
+                                  └───────────────┘
 ```
 
 Services communicate over a shared Docker bridge network (`clawbox-net`),
@@ -161,23 +177,31 @@ Hermes is pre-configured to use `http://9router:20128/v1` inside Docker.
 
 ## ⚙️ Configuration
 
-Each stack has its own `.env` file. Examples are provided as `.env.example`:
+Provider settings (URL, API key, model) are centralized in a single file:
 
 ```bash
-# Create .env from examples (already done if you ran make envs)
-cp providers/.env.example providers/.env
-cp hermes/.env.example hermes/.env
-cp openclaw/.env.example openclaw/.env
+.env-provider          # ← ÚNICO lugar para trocar de provider
 ```
 
-Or use the shortcut:
+Each stack also has its own `.env` for stack-specific settings (ports, auth, etc.).
+`make envs` merges `.env-provider` into each stack's `.env` automatically.
 
 ```bash
-make envs
+make envs               # Creates/updates all .env files from templates + .env-provider
 ```
 
-All variables in the compose files have sensible defaults — no `.env` is
-strictly required to start the stack. Override only what you need.
+### `.env-provider` — Centralized Provider
+
+| Variable            | Default                   | Description                           |
+| ------------------- | ------------------------- | ------------------------------------- |
+| `PROVIDER_BASE_URL` | `http://9router:20128/v1` | OpenAI-compatible endpoint            |
+| `PROVIDER_API_KEY`  | `sk-free-via-9router`     | API key (sobrescrito pelo setup real) |
+| `PROVIDER_MODEL`    | `gpt-4o-mini`             | Default model for all stacks          |
+
+**Para trocar de provider globalmente:** edite `.env-provider` → `make envs` → todos os stacks atualizados.
+
+> A chave **real** do 9router é extraída do SQLite e sobrescrita no `.env-provider`
+> automaticamente pelo `openclaw-setup.sh` / `sync-provider.sh`.
 
 ### providers/.env
 
@@ -188,25 +212,40 @@ strictly required to start the stack. Override only what you need.
 
 ### hermes/.env
 
-| Variable                    | Default      | Description                   |
-| --------------------------- | ------------ | ----------------------------- |
-| `HERMES_DASHBOARD_PORT`     | `4999`       | Host port for dashboard       |
-| `HERMES_DASHBOARD_USERNAME` | `admin`      | Dashboard basic auth          |
-| `HERMES_DASHBOARD_PASSWORD` | `admin`      | Dashboard basic auth          |
-| `OPENAI_API_KEY`            | —            | 9router API key               |
-| `HERMES_DEFAULT_MODEL`      | `model-free` | Default LLM model             |
-| `TELEGRAM_BOT_TOKEN`        | —            | Optional Telegram integration |
-| `DISCORD_BOT_TOKEN`         | —            | Optional Discord integration  |
+| Variable                    | Default | Description                   |
+| --------------------------- | ------- | ----------------------------- |
+| `HERMES_DASHBOARD_PORT`     | `4999`  | Host port for dashboard       |
+| `HERMES_DASHBOARD_USERNAME` | `admin` | Dashboard basic auth          |
+| `HERMES_DASHBOARD_PASSWORD` | `admin` | Dashboard basic auth          |
+| `TELEGRAM_BOT_TOKEN`        | —       | Optional Telegram integration |
+| `DISCORD_BOT_TOKEN`         | —       | Optional Discord integration  |
+
+Provider vars (`OPENAI_API_KEY`, `HERMES_API_KEY`, `HERMES_DEFAULT_MODEL`)
+vêm do `.env-provider` automaticamente.
 
 ### openclaw/.env
 
-| Variable                 | Default         | Description                       |
-| ------------------------ | --------------- | --------------------------------- |
-| `OPENCLAW_PORT`          | `18789`         | Host port (gateway direto)        |
-| `OPENCLAW_PROXY_PORT`    | `8080`          | Host port (nginx proxy)           |
-| `OPENCLAW_AUTH_USERNAME` | `admin`         | Nginx basic auth username         |
-| `OPENCLAW_AUTH_PASSWORD` | `clawbox-admin` | Nginx basic auth password         |
-| `ROUTER_9_API_KEY`       | —               | 9router API key (auto-preenchido) |
+| Variable                 | Default         | Description                |
+| ------------------------ | --------------- | -------------------------- |
+| `OPENCLAW_PORT`          | `18789`         | Host port (gateway direto) |
+| `OPENCLAW_PROXY_PORT`    | `8080`          | Host port (nginx proxy)    |
+| `OPENCLAW_AUTH_USERNAME` | `admin`         | Nginx basic auth username  |
+| `OPENCLAW_AUTH_PASSWORD` | `clawbox-admin` | Nginx basic auth password  |
+
+`ROUTER_9_API_KEY` vem do `.env-provider` + é sobrescrito pelo setup
+com a chave real extraída do 9router.
+
+### nanobot/.env
+
+| Variable               | Default | Description                     |
+| ---------------------- | ------- | ------------------------------- |
+| `NANOBOT_GW_HTTP_PORT` | `8765`  | Gateway HTTP port               |
+| `NANOBOT_GW_WS_PORT`   | `18790` | Gateway WebSocket port          |
+| `NANOBOT_API_PORT`     | `8900`  | API Server port                 |
+| `ANTHROPIC_API_KEY`    | —       | Anthropic key (Claude provider) |
+
+Provider vars (`OPENAI_BASE_URL`, `OPENAI_API_KEY`) vêm do `.env-provider`
+automaticamente.
 
 ---
 
@@ -218,25 +257,34 @@ make providers        # Core: 9router + headroom + dind
 make hermes           # Hermes (gateway + dashboard)
 make openclaw         # OpenClaw
 make openclaw-setup   # Configure 9router provider (auto-extracts key)
+make nanobot            # FLOW ÚNICO: sobe + onboard + setup 9router
+make nanobot-up         # Só sobe gateway + API
+make nanobot-agent      # Nanobot interactive agent (CLI)
+make nanobot-onboard    # Nanobot initial config
+make nanobot-setup      # Configura provider 9router
+make nanobot-status     # Nanobot status
 make all              # Everything
 
 # ── Down ────────────────────────────────────────
 make down             # Remove all containers (volumes preserved)
 make down-hermes      # Only Hermes
 make down-openclaw    # Only OpenClaw
+make down-nanobot     # Only Nanobot
 
 # ── Logs ────────────────────────────────────────
 make logs             # All services
 make logs svc=9router # Only 9router
 make logs svc=hermes  # Only Hermes
 make logs svc=openclaw# Only OpenClaw
+make logs svc=nanobot-gateway # Only Nanobot gateway
 
 # ── Maintenance ─────────────────────────────────
 make ps               # List containers
 make pull             # Pull updated images
 make build            # Rebuild local images
 make clean            # down + remove volumes (WARNING: deletes data)
-make envs             # Create .env from .env.example in each folder
+make envs             # Create/update .env + .env-provider (merge provider vars)
+make sync-provider    # Extract real 9router key to .env-provider
 
 # ── OpenClaw ────────────────────────────────────
 make openclaw-ui      # Open Control UI via proxy (port 8080)
@@ -245,16 +293,30 @@ make openclaw-auth    # Show proxy credentials
 make openclaw-onboard # Initial onboarding
 make openclaw-setup   # (Re)configure 9router provider
 
+# ── Nanobot ─────────────────────────────────────
+make nanobot                  # FLOW ÚNICO: sobe + onboard + setup 9router
+make nanobot-up               # Só sobe gateway + API
+make nanobot-gateway          # Gateway HTTP/WS
+make nanobot-api              # API server
+make nanobot-agent            # Interactive agent (CLI)
+make nanobot-onboard          # Initial configuration
+make nanobot-setup            # Configura provider 9router
+make nanobot-status           # Show status
+make nanobot-gateway-config   # Show gateway config
+
 # ── Individual stacks ───────────────────────────
 make -C providers up  # Start only providers
 make -C hermes down   # Stop only Hermes
 make -C openclaw logs # Logs only OpenClaw
+make -C nanobot up    # Start only Nanobot
 
 # ── Open dashboards ─────────────────────────────
 open http://localhost:20128/dashboard   # 9Router
 open http://localhost:4999              # Hermes
 open http://localhost:8080              # OpenClaw (via proxy, recomendado)
 open http://localhost:18789             # OpenClaw (gateway direto)
+open http://localhost:8765              # Nanobot Gateway (HTTP)
+open http://localhost:8900              # Nanobot API Server
 ```
 
 ---

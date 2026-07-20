@@ -8,7 +8,7 @@
 #   docker compose -p clawbox down
 #
 # Depende de: 9router (saudável) + dind (saudável) — inicie providers/ primeiro
-# Env: .env-hermes
+# Env: .env
 #
 # Acessos:
 #   Hermes Dashboard:   http://127.0.0.1:4999 (bind local, basic auth)
@@ -29,7 +29,7 @@ services:
     env_file: .env
     volumes:
       - hermes-data:/opt/data
-      - ../hermes-workspace:/opt/data/workspace
+      - hermes-workspace:/opt/data/workspace
     environment:
       - HERMES_UID=${HERMES_UID:-1000}
       - HERMES_GID=${HERMES_GID:-1000}
@@ -59,3 +59,5 @@ networks:
 volumes:
   hermes-data:
     name: clawbox-hermes-data
+  hermes-workspace:
+    name: clawbox-hermes-workspace

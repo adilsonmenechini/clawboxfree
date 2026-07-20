@@ -1,12 +1,11 @@
 .env
+.env-provider
 .DS_Store
 __pycache__/
 *.pyc
 .venv/
 openclaw-workspace/*
-providers/data/logs/
-providers/data/db/backups/
 *.sqlite-shm
 *.sqlite-wal
-providers/data/jwt-secret
+providers/data
 openclaw/openclaw-workspace

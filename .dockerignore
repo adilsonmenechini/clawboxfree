@@ -1,0 +1,8 @@
+.git
+.gitignore
+*.md
+__pycache__
+*.pyc
+.env
+.env.*
+.env-provider

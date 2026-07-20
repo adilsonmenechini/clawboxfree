@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # ============================================================
 # openclaw-setup.sh — Sincroniza chave 9router com OpenClaw
+# ============================================================
 #
 # Escreve a chave da API do 9router no .env como ROUTER_9_API_KEY
 # e configura o openclaw.json para referenciá-la via env var.
+# Também sincroniza a chave real para o .env-provider central.
 # O segredo nunca fica no openclaw.json — só no .env (gitignored).
 # ============================================================
 set -euo pipefail
 
 CLAWBOX_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$CLAWBOX_DIR/.." && pwd)"
 ENV_FILE="$CLAWBOX_DIR/.env"
+ENV_PROVIDER="$REPO_ROOT/.env-provider"
 
 echo "=== Verificando chave da API do 9router ==="
 
@@ -47,6 +51,18 @@ else
     echo "ROUTER_9_API_KEY=$KEY" >> "$ENV_FILE"
 fi
 echo "ROUTER_9_API_KEY atualizado no .env"
+
+echo ""
+echo "=== Sincronizando chave real para .env-provider central ==="
+if [ -f "$ENV_PROVIDER" ]; then
+    if grep -q '^PROVIDER_API_KEY=' "$ENV_PROVIDER" 2>/dev/null; then
+        sed -i '' "s|^PROVIDER_API_KEY=.*|PROVIDER_API_KEY=$KEY|" "$ENV_PROVIDER"
+    else
+        echo "" >> "$ENV_PROVIDER"
+        echo "PROVIDER_API_KEY=$KEY" >> "$ENV_PROVIDER"
+    fi
+    echo ".env-provider atualizado com chave real"
+fi
 
 echo ""
 echo "=== Sincronizando ref no OpenClaw (CLI) ==="
@@ -108,8 +124,8 @@ if [ -n "$TOKEN" ] && [ "$TOKEN" != "clawbox-init-token" ]; then
 fi
 
 echo ""
-echo "=== Reiniciando gateway OpenClaw ==="
-docker compose -p clawbox restart openclaw >/dev/null 2>&1
+echo "=== Recriando gateway OpenClaw (env_file atualizado) ==="
+docker compose -p clawbox up -d openclaw --force-recreate >/dev/null 2>&1
 
 echo ""
 echo "✅ OpenClaw configurado — chave 9router em .env (ROUTER_9_API_KEY), config com ref"
